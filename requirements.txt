@@ -1,0 +1,6 @@
+streamlit
+numpy
+pandas
+altair
+vega_datasets
+pycountry
