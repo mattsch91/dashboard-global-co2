@@ -8,40 +8,21 @@ import pycountry
 # Load the data
 dat = pd.read_csv("https://nyc3.digitaloceanspaces.com/owid-public/data/co2/owid-co2-data.csv")
 
+st.set_page_config(layout="wide")
 
 # =======================================
 # Define Sidebar filters
 # =======================================
 
-# ========================================
-# Line Chart
-# ========================================
-st.sidebar.header("Line Chart")
-# Country selection
-selected_countries = st.sidebar.multiselect(
-    "Select Countries:",
-    options=dat["country"].unique(),
-    default=["Germany", "France", "Italy", "United Kingdom", "United States"]
-)
+# define quantitative features
+feature_options = [col for col in dat.columns if dat[col].dtype in [np.float64, np.int64]]
+st.sidebar.header("Define features and parameters")
 # Feature selection
-feature_options_line = [col for col in dat.columns if dat[col].dtype in [np.float64, np.int64]]
-selected_feature_line = st.sidebar.selectbox(
-    "Select Feature for Line Chart:",
-    options=feature_options_line,
-    index=feature_options_line.index("co2_per_capita") if "co2_per_capita" in feature_options_line else 0
+selected_feature = st.sidebar.selectbox(
+    "Select Quantitative Feature:",
+    options=feature_options,
+    index=feature_options.index("co2_per_capita") if "co2_per_capita" in feature_options else 0
 )
-# Slider for year range
-year_range = st.sidebar.slider(
-    "Select Year Range for Line Chart:",
-    min_value=int(dat["year"].min()),
-    max_value=int(dat["year"].max()),
-    value=(2000, 2022)
-)
-
-# ========================================
-# Map Chart
-# ========================================
-st.sidebar.header("Map Chart")
 # Year selection
 selected_year = st.sidebar.slider(
     "Select Year:",
@@ -49,20 +30,39 @@ selected_year = st.sidebar.slider(
     max_value=int(dat["year"].max()),
     value=2022,
 )
-# Feature selection
-feature_options_map = [col for col in dat.columns if dat[col].dtype in [np.float64, np.int64]]
-selected_feature_map = st.sidebar.selectbox(
-    "Select Feature for Map Chart:",
-    options=feature_options_map,
-    index=feature_options_map.index("co2_per_capita") if "co2_per_capita" in feature_options_map else 0
+# Country selection
+selected_countries = st.sidebar.multiselect(
+    "Select Countries for Line Chart:",
+    options=dat["country"].unique(),
+    default=["China", "United Kingdom", "Germany", "Japan", "United States"]
 )
+# Slider for year range
+year_range = st.sidebar.slider(
+    "Select Year Range:",
+    min_value=int(dat["year"].min()),
+    max_value=int(dat["year"].max()),
+    value=(1945, 2023)
+)
+# Feature selection for scatter plot X-axis
+selected_feature_scatter_x = st.sidebar.selectbox(
+    "Select Feature for Scatter Plot (X-axis):",
+    options=feature_options,
+    index=feature_options.index("energy_per_gdp") if "energy_per_gdp" in feature_options else 0
+)
+# Feature selection size
+selected_feature_scatter_size = st.sidebar.selectbox(
+    "Select Feature for Scatter Plot (point size):",
+    options=feature_options,
+    index=feature_options.index("population") if "population" in feature_options else 0
+)
+scatter_type = st.sidebar.selectbox(
+    "Choose Axis Scale for Scatter Plot:",
+    options = ["linear", "log"], index = 0)
 
 # ========================================
 # Filter data
 # ========================================
-dat_filtered = dat[(dat["country"].isin(selected_countries)) & (dat["year"].between(year_range[0], year_range[1]))]
-dat_year = dat[dat["year"] == selected_year].copy()
-
+dat_map = dat[dat["year"] == selected_year].copy()
 # Helper function to get ISO code
 def get_iso_code(country_name):
     try:
@@ -70,50 +70,71 @@ def get_iso_code(country_name):
     except LookupError:
         return None
 
-dat_year["country_id"] = dat_year['iso_code'].apply(get_iso_code)
+dat_map["country_id"] = dat_map['iso_code'].apply(get_iso_code)
+dat_line = dat[(dat["country"].isin(selected_countries)) & (dat["year"].between(year_range[0], year_range[1]))]
+dat_scatter = dat[dat["year"] == selected_year].copy()
+dat_scatter = dat_scatter[dat_scatter["country"] != "World"]
 
 # ========================================
 # Plot data
 # ========================================
 
-# Line Chart
-st.subheader(f"{selected_feature_line.replace('_', ' ').title()} Over Time")
-c1 = alt.Chart(dat_filtered).mark_line().encode(
-    x="year",
-    y=alt.Y(selected_feature_line, title=selected_feature_line.replace('_', ' ').title()),
-    color="country",
-    tooltip=[selected_feature_line, "year"]
-).interactive().properties(
-    width=600, height=400
-)
-st.altair_chart(c1, use_container_width=True)
-
+# ========================================
 # Map Chart
-st.subheader(f"World {selected_feature_map.replace('_', ' ').title()} in {selected_year} by Country")
-
+# ========================================
 # Sample countries data (GeoJSON format)
 countries = alt.topo_feature(data.world_110m.url, 'countries')
 
 map_chart = alt.Chart(countries).mark_geoshape().encode(
-    color=alt.Color(selected_feature_map, title=selected_feature_map.replace('_', ' ').title(), type = 'quantitative'),
-    tooltip=['country:N', alt.Tooltip(selected_feature_map, type = 'quantitative')]
+    color=alt.Color(selected_feature, title=selected_feature.replace('_', ' ').title(), type = 'quantitative'),
+    tooltip=['country:N', alt.Tooltip(selected_feature, type = 'quantitative')]
 ).transform_lookup(
     lookup='id',
-    from_=alt.LookupData(dat_year, 'country_id', [selected_feature_map, 'country'])
-).properties(
-    width=1000,
-    height=500#,
-    #title=f"World CO2 per Capita by Country in {selected_year}"
+    from_=alt.LookupData(dat_map, 'country_id', [selected_feature, 'country'])
 ).project(
     type='equirectangular'
 ).interactive()
 
+st.subheader(f"World {selected_feature.replace('_', ' ').title()} in {selected_year} by Country")
 st.altair_chart(map_chart, use_container_width=True)
 
+# ========================================
+# Line Chart
+# ========================================
+c1 = alt.Chart(dat_line).mark_line().encode(
+    x="year",
+    y=alt.Y(selected_feature, title=selected_feature.replace('_', ' ').title()),
+    color="country",
+    tooltip=["country", selected_feature, "year"]
+).interactive()
 
+# ========================================
+# Scatter Plot
+# ========================================
+c2 = alt.Chart(dat_scatter).mark_circle().encode(
+    x=alt.X(selected_feature_scatter_x, 
+            scale = alt.Scale(type = scatter_type),
+            title=selected_feature_scatter_x.replace('_', ' ').title()),
+    y=alt.Y(selected_feature, 
+            scale = alt.Scale(type = scatter_type),            
+            title=selected_feature.replace('_', ' ').title()),
+    size = selected_feature_scatter_size,
+    tooltip = ["country", selected_feature_scatter_x, selected_feature, selected_feature_scatter_size]
+).interactive()
+
+# Create two columns for the side-by-side plots
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader(f"{selected_feature.replace('_', ' ').title()} Over Time")
+    st.altair_chart(c1, use_container_width=True)
+    
+with col2:
+    st.subheader(f"{selected_feature.replace('_', ' ').title()} vs. {selected_feature_scatter_x.replace('_', ' ').title()} in {selected_year}")
+    st.altair_chart(c2, use_container_width=True)
 
 # Footer
 st.markdown("---")
-st.markdown(
-    "Created with [Streamlit](https://streamlit.io)."
-)
+st.markdown("Created with [Streamlit](https://streamlit.io).")
+st.markdown("""The [data](https://github.com/owid/co2-data) underlying this dashboard was obtained from 
+            [Our World in Data](https://ourworldindata.org/co2-and-greenhouse-gas-emissions). """)     
