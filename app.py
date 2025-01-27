@@ -8,6 +8,9 @@ import pycountry
 # Load the data
 dat = pd.read_csv("https://nyc3.digitaloceanspaces.com/owid-public/data/co2/owid-co2-data.csv")
 
+legend = pd.read_csv("https://raw.githubusercontent.com/owid/co2-data/master/owid-co2-codebook.csv")
+feature_descriptions = dict(zip(legend["column"], legend["description"]))
+                 
 st.set_page_config(layout="wide")
 
 # =======================================
@@ -15,13 +18,19 @@ st.set_page_config(layout="wide")
 # =======================================
 
 # define quantitative features
-feature_options = [col for col in dat.columns if dat[col].dtype in [np.float64, np.int64]]
+feature_options = [col for col in dat.columns if dat[col].dtype in [np.float64, np.int64] and col != "year"]
+
 st.sidebar.header("Define features and parameters")
+# function to display description over hover
+def format_feature_with_description(feature):
+    desc = feature_descriptions.get(feature, "No description available")
+    return f"{feature} - {desc}"
 # Feature selection
 selected_feature = st.sidebar.selectbox(
     "Select Quantitative Feature:",
     options=feature_options,
-    index=feature_options.index("co2_per_capita") if "co2_per_capita" in feature_options else 0
+    index=feature_options.index("co2_per_capita") if "co2_per_capita" in feature_options else 0,
+    format_func = lambda x: format_feature_with_description(x)
 )
 # Year selection
 selected_year = st.sidebar.slider(
@@ -47,13 +56,15 @@ year_range = st.sidebar.slider(
 selected_feature_scatter_x = st.sidebar.selectbox(
     "Select Feature for Scatter Plot (X-axis):",
     options=feature_options,
-    index=feature_options.index("energy_per_gdp") if "energy_per_gdp" in feature_options else 0
+    index=feature_options.index("energy_per_gdp") if "energy_per_gdp" in feature_options else 0,
+    format_func = lambda x: format_feature_with_description(x)
 )
 # Feature selection size
 selected_feature_scatter_size = st.sidebar.selectbox(
     "Select Feature for Scatter Plot (point size):",
     options=feature_options,
-    index=feature_options.index("population") if "population" in feature_options else 0
+    index=feature_options.index("population") if "population" in feature_options else 0,
+    format_func = lambda x: format_feature_with_description(x)
 )
 scatter_type = st.sidebar.selectbox(
     "Choose Axis Scale for Scatter Plot:",
